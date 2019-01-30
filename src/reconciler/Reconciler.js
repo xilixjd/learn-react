@@ -14,7 +14,8 @@ import {
   ClassComponent,
   HostRoot, 
   HostComponent,
-  SuspenseComponent
+  SuspenseComponent,
+  Fragment,
 } from '../shared/ReactWorkTags'
 import {
   NoEffect,
@@ -68,6 +69,24 @@ function Reconciler (hostConfig) {
   }
 
   function requestCurrentTime() {
+    // requestCurrentTime is called by the scheduler to compute an expiration
+    // time.
+    //
+    // Expiration times are computed by adding to the current time (the start
+    // time). However, if two updates are scheduled within the same event, we
+    // should treat their start times as simultaneous, even if the actual clock
+    // time has advanced between the first and second call.
+
+    // In other words, because expiration times determine how updates are batched,
+    // we want all updates of like priority that occur within the same event to
+    // receive the same expiration time. Otherwise we get tearing.
+    //
+    // We keep track of two separate times: the current "renderer" time and the
+    // current "scheduler" time. The renderer time can be updated whenever; it
+    // only exists to minimize the calls performance.now.
+    //
+    // But the scheduler time can only be updated if there's no pending work, or
+    // if we know for certain that we're not in the middle of an event.
     if (isRendering) {    
       return currentSchedulerTime
     }
@@ -374,12 +393,21 @@ function Reconciler (hostConfig) {
       case HostComponent: {
         return updateHostComponent(current, workInProgress, renderExpirationTime)
       }
+      case Fragment: {
+        return updateFragment(current, workInProgress, renderExpirationTime)
+      }
       case SuspenseComponent: {
         return updateSuspenseComponent(current, workInProgress, renderExpirationTime)
       }
       default:
         throw new Error('unknown unit of work tag') 
     }
+  }
+
+  function updateFragment(current, workInProgress, renderExpirationTime) {
+    var nextChildren = workInProgress.pendingProps
+    reconcileChildren(current, workInProgress, nextChildren, renderExpirationTime)
+    return workInProgress.child
   }
 
   function updateSuspenseComponent (current, workInProgress, renderExpirationTime) {
@@ -553,6 +581,14 @@ function Reconciler (hostConfig) {
     }
   }
 
+  function createFiberFromFragment(element, expirationTime) {
+    var pendingProps = element
+    var fiber = new FiberNode(Fragment, pendingProps);
+    fiber.type = element.type
+    fiber.expirationTime = expirationTime;
+    return fiber
+  }
+
   function createFiberFromElement (element, expirationTime) {
     let fiber
     const type = element.type
@@ -578,6 +614,11 @@ function Reconciler (hostConfig) {
   }
   
   function createChild (returnFiber, newChild, expirationTime) {
+    if (newChild instanceof Array) {
+      var created = createFiberFromFragment(newChild, expirationTime)
+      created.return = returnFiber;
+      return created;
+    }
     if (typeof newChild === 'object' && newChild !== null) {
       let created = createFiberFromElement(newChild, expirationTime)
       created.return = returnFiber
@@ -599,6 +640,19 @@ function Reconciler (hostConfig) {
   }
 
   function updateSlot (returnFiber, oldFiber, newChild, expirationTime) {
+    if (newChild instanceof Array) {
+      if (oldFiber === null || oldFiber.tag !== Fragment) {
+        // Insert
+        var created = createFiberFromFragment(newChild, expirationTime);
+        created.return = returnFiber;
+        return created;
+      } else {
+        // Update
+        var existing = useFiber(oldFiber, newChild, expirationTime);
+        existing.return = returnFiber;
+        return existing;
+      }
+    }
     if (typeof newChild === 'object' && newChild !== null) {
       return updateElement(returnFiber, oldFiber, newChild, expirationTime)
     }
@@ -744,7 +798,8 @@ function Reconciler (hostConfig) {
         }
         break
       }
-      case SuspenseComponent: {
+      case SuspenseComponent:
+      case Fragment: {
         break
       }
       default: {
@@ -763,25 +818,25 @@ function Reconciler (hostConfig) {
         completeWork(current, workInProgress)
         if (returnFiber !== null &&
           (returnFiber.effectTag & Incomplete) === NoEffect) {
-            if (returnFiber.firstEffect === null) {
-              returnFiber.firstEffect = workInProgress.firstEffect
-            }
-            if (workInProgress.lastEffect !== null) {
-              if (returnFiber.lastEffect !== null) {
-                returnFiber.lastEffect.nextEffect = workInProgress.firstEffect
-              }
-              returnFiber.lastEffect = workInProgress.lastEffect
-            }
-            const effectTag = workInProgress.effectTag
-            if (effectTag >= Placement) {
-              if (returnFiber.lastEffect !== null) {
-                returnFiber.lastEffect.nextEffect = workInProgress
-              } else {
-                returnFiber.firstEffect = workInProgress
-              }
-              returnFiber.lastEffect = workInProgress
-            }
+          if (returnFiber.firstEffect === null) {
+            returnFiber.firstEffect = workInProgress.firstEffect
           }
+          if (workInProgress.lastEffect !== null) {
+            if (returnFiber.lastEffect !== null) {
+              returnFiber.lastEffect.nextEffect = workInProgress.firstEffect
+            }
+            returnFiber.lastEffect = workInProgress.lastEffect
+          }
+          const effectTag = workInProgress.effectTag
+          if (effectTag >= Placement) {
+            if (returnFiber.lastEffect !== null) {
+              returnFiber.lastEffect.nextEffect = workInProgress
+            } else {
+              returnFiber.firstEffect = workInProgress
+            }
+            returnFiber.lastEffect = workInProgress
+          }
+        }
         if (siblingFiber !== null) {
           return siblingFiber
         } else if (returnFiber !== null) {

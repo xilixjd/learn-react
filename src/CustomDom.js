@@ -5,7 +5,8 @@ let customRenderer
 
 const hostConfig = {
   now: () => {
-    return performance.now
+    // return performance.now
+    return Date.now()
   },
   shouldSetTextContent: (props) => {
     return typeof props.children === 'string' || typeof props.children === 'number'
