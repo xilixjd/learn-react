@@ -1,6 +1,6 @@
-import React from './react'
-import logo from './logo.svg'
-import './App.css'
+import React from "./react";
+import logo from "./logo.svg";
+import "./App.css";
 
 // class ColorText extends React.Component {
 //   constructor(props) {
@@ -32,7 +32,7 @@ import './App.css'
 //     };
 //     this.handleChange = this.handleChange.bind(this)
 //   }
-  
+
 //   shouldComponentUpdate (nextProps, nextState) {
 //     if (this.state.counter === 1) {
 //       return false
@@ -63,7 +63,7 @@ import './App.css'
 //         </header>
 //         <div className="App-intro">
 //           <input type="text" value={this.state.value} onInput={this.handleChange} />
-//           <ColorText>      
+//           <ColorText>
 //             <div className="button-container">
 //               <button className="decrement-button" onClick={() => {
 //                 this.setState({ counter: this.state.counter - 1 })
@@ -87,41 +87,45 @@ import './App.css'
 
 class App extends React.Component {
   constructor(props) {
-      super(props)
-      this.onChange = this.onChange.bind(this)
-      this.onClick = this.onClick.bind(this)
-      this.state = {
-          inputValue: "",
-          divs: [<div>1</div>],
-      }
+    super(props);
+    this.onChange = this.onChange.bind(this);
+    let divs = [];
+    this.state = {
+      inputValue: "",
+      divs
+    };
   }
 
   onChange(e) {
-      this.setState({
-          inputValue: e.target.value,
-      })
+    this.setState({
+      inputValue: e.target.value
+    });
   }
 
-  onClick(e) {
-      let divs = []
-      for (let i = 0; i < 100000; i++) {
-          divs.push(<div key={i}>{i}</div>)
-      }
-      this.setState({
-          divs,
-      })
+  randomHexColor() {
+    return (
+      "#" +
+      ("0000" + ((Math.random() * 0x1000000) << 0).toString(16)).substr(-6)
+    );
   }
 
   render() {
-      
-      return (
-          <div>
-              <input onChange={this.onChange} value={this.state.inputValue}/>
-              <button onClick={this.onClick}>click</button>
-              {this.state.divs}
-          </div>
-      )
+    let divs = [];
+    let inputValue = this.state.inputValue;
+    for (let i = 0; i < 30000; i++) {
+      divs.push(
+        <div style={{ background: this.randomHexColor() }} key={i}>
+          {inputValue}
+        </div>
+      );
+    }
+    return (
+      <div>
+        <input onInput={this.onChange} value={this.state.inputValue} />
+        {divs}
+      </div>
+    );
   }
 }
 
-export default App
+export default App;
